@@ -14,23 +14,42 @@ export const register = async (req: Request, res: Response): Promise<void> => {
             res.status(400).send('Username and password are required')
         }
 
-    const hashedPassword = await bcrypt.hash(req.body.password, 10);
-    const newUser = new User({username: req.body.username, password: hashedPassword});
-    
-    await newUser.save();
-    res.json(newUser);
+        const hashedPassword = await bcrypt.hash(req.body.password, 10);
+        const newUser = new User({username: req.body.username, password: hashedPassword});
+        
+        await newUser.save();
+        res.json(newUser);
     } catch (error) {
         console.error('Error registering user:', error);
-        res.status(500).send('Internal server error')
+
+        if (error instanceof Error && (error as any).code ===11000 ) {
+            res.status(400).send('Username already exists');
+        } else {
+            if (!res.headersSent){
+                res.status(500).send('Internal server error');
+            }
+        }
     }
 };
 
 export const login = async (req: Request, res: Response): Promise<void> => {
-    const user = await User.findOne({username: req.body.username});
-    if (user && await bcrypt.compare(req.body.password, user.password)) {
-        const token = jwt.sign({id: user._id}, process.env.JWT_SECRET as string);
-        res.json({token});
-    } else {
-        res.status(401).send('Invalid credentials');
+    try {
+        const {username, password} = req.body;
+        if(!username || !password) {
+            res.status(400).send('Username and password are required')
+        }
+
+        const user = await User.findOne({username: req.body.username});
+        if (user && await bcrypt.compare(req.body.password, user.password)) {
+            const token = jwt.sign({id: user._id}, process.env.JWT_SECRET as string);
+            res.json({token});
+        } else {
+            res.status(401).send('Invalid credentials');
+        }
+    } catch (error) {
+        console.error('Error logging in user:', error);
+        if (!res.headersSent) {
+            res.status(500).send('Internal Server Error');
+        }
     }
 };
